@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import imageCompression from 'browser-image-compression';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import { 
-  Plus, Trash2, Camera, Image as ImageIcon, Search, FileText, ArrowRight, ArrowLeft, LogOut, Calendar, X, Edit3, CheckCircle2, Truck, Sparkles
+  Plus, Trash2, Camera, Image as ImageIcon, Search, FileText, ArrowRight, ArrowLeft, LogOut, Calendar, X, Edit3, CheckCircle2, Share2, Truck, Sparkles
 } from 'lucide-react';
 
-// DIRECT SUPABASE CLIENT SETUP
+// DIRECT SUPABASE CLIENT (Sabse safe tarika, kabhi break nahi hota)
 const supabaseUrl = 'https://sofurgsfwulbhnnnarfj.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNvZnVyZ3Nmd3VsYmhubm5hcmZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzMzE3NTQsImV4cCI6MjEwMzkwNzc1NH0.xv2snfag5gf18BkzCqYaSlIQw-QjWryvpOcuqqYLm9U';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -23,19 +25,18 @@ export default function App() {
   // Splash Screen State
   const [showSplash, setShowSplash] = useState(true);
 
-  // Authentication & Navigation
+  // Authentication
   const [role, setRole] = useState(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
   
+  // Navigation & Data
   const [activeTab, setActiveTab] = useState('new');
   const [currentStep, setCurrentStep] = useState(1);
-  
-  // Data Records & Loading
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   
-  // Search & Filter State
+  // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
@@ -65,7 +66,7 @@ export default function App() {
   const [kantaPreview, setKantaPreview] = useState('');
   const [kantaUrlSaved, setKantaUrlSaved] = useState('');
 
-  // Auto hide splash screen after 2.5 seconds
+  // Auto-hide Splash Screen after 2.5s
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowSplash(false);
@@ -279,93 +280,104 @@ export default function App() {
     }
   };
 
-  // NATIVE ANDROID/SYSTEM PRINT DIALOG TO DIRECTLY SAVE PDF
-  const generateAndSharePDF = (record) => {
+  // 100% RELIABLE WHATSAPP DESPATCH REPORT (Har phone par turant kaam karega)
+  const sendWhatsAppSlip = (record) => {
+    const c = record.consignments?.[0] || {};
+    
+    let msg = `*DESPATCH LOADING SLIP*\n`;
+    msg += `--------------------------------\n`;
+    msg += `*Factory:* ${record.factory_name}\n`;
+    msg += `*Gaadi No:* ${record.truck_number}\n`;
+    msg += `*Date:* ${record.loading_date}\n`;
+    msg += `*Party:* ${c.partyName || 'Direct'}\n`;
+    msg += `*Item:* ${c.item || ''} (${c.marka || ''})\n`;
+    msg += `*Packing:* ${c.packing || ''} | *Moisture:* ${c.moisture ? c.moisture + '%' : 'N/A'}\n`;
+    msg += `*Driver:* ${record.driver_name || 'N/A'} (${record.driver_mobile || 'N/A'})\n`;
+    msg += `--------------------------------\n`;
+    msg += `*DHAANG DETAILS & PHOTO VERIFICATION:*\n`;
+
+    (c.dhaange || []).forEach((d, idx) => {
+      msg += `• Layer ${idx + 1}: *${d.bags || 0} Bags*`;
+      if (d.photoUrl) {
+        msg += ` ➔ Photo: ${d.photoUrl}\n`;
+      } else {
+        msg += ` (No Photo)\n`;
+      }
+    });
+
+    msg += `--------------------------------\n`;
+    msg += `*Net Weight:* ${record.net_weight ? record.net_weight + ' KG' : 'N/A'}\n`;
+    if (record.kanta_slip_url) {
+      msg += `*Kanta Slip Proof:* ${record.kanta_slip_url}\n`;
+    }
+    msg += `--------------------------------\n`;
+    msg += `*Made by Harshit - Mill Loading Desk*`;
+
+    const encodedMsg = encodeURIComponent(msg);
+    window.open(`https://api.whatsapp.com/send?text=${encodedMsg}`, '_blank');
+  };
+
+  // NATIVE SHARE / PDF LOGIC
+  const handleShareOrDownloadPDF = async (record) => {
     try {
+      const doc = new jsPDF();
+      const fileName = `Loading_${record.truck_number}.pdf`;
+
+      doc.setFillColor(30, 58, 138);
+      doc.rect(0, 0, 210, 26, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(16);
+      doc.text((record.factory_name || 'FACTORY DESPATCH').toUpperCase(), 14, 16);
+      doc.setFontSize(9);
+      doc.setTextColor(253, 224, 71);
+      doc.text("DESPATCH LOADING SLIP & DHANG VERIFICATION", 14, 22);
+
       const c = record.consignments?.[0] || {};
-      const dhaangRows = (c.dhaange || []).map((d, idx) => `
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 10px; font-weight: bold; color: #1e293b;">Dhaang (${idx + 1})</td>
-          <td style="padding: 10px; text-align: center; font-weight: 800; color: #047857;">${d.bags || 0} Bags</td>
-          <td style="padding: 10px; text-align: right;">
-            ${d.photoUrl ? `<a href="${d.photoUrl}" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: bold;">Photo Proof Link</a>` : '<span style="color:#94a3b8;">No Photo</span>'}
-          </td>
-        </tr>
-      `).join('');
+      doc.setTextColor(15, 23, 42);
+      doc.setFontSize(11);
+      doc.text(`Vehicle No: ${record.truck_number}`, 14, 34);
+      doc.text(`Date: ${record.loading_date}`, 140, 34);
+      doc.text(`Driver: ${record.driver_name || 'N/A'} (Mob: ${record.driver_mobile || 'N/A'})`, 14, 42);
+      doc.text(`Party: ${c.partyName || 'Direct'} | Item: ${c.item || ''} | Marka: ${c.marka || ''}`, 14, 50);
 
-      const slipContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Loading_${record.truck_number}</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 16px; color: #0f172a; margin: 0; background: #fff; }
-            .header { background: #1e3a8a; color: #fff; padding: 18px; border-radius: 12px; text-align: center; margin-bottom: 14px; }
-            .factory { font-size: 20px; font-weight: 900; }
-            .sub { font-size: 11px; color: #fde047; font-weight: bold; margin-top: 4px; text-transform: uppercase; }
-            .box { border: 2px solid #cbd5e1; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
-            .row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; }
-            .val { font-weight: 800; color: #0f172a; }
-            table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
-            th { background: #f1f5f9; padding: 8px; text-align: left; }
-            .net-box { background: #ecfdf5; border: 2px solid #10b981; padding: 12px; border-radius: 10px; font-weight: 800; font-size: 15px; display: flex; justify-content: space-between; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="factory">${(record.factory_name || 'DESPATCH SLIP').toUpperCase()}</div>
-            <div class="sub">LOADING & DHANG VERIFICATION SLIP</div>
-          </div>
-          
-          <div class="box">
-            <div class="row"><span>Gaadi No:</span> <span class="val" style="color:#1e3a8a; font-size:16px;">${record.truck_number}</span></div>
-            <div class="row"><span>Taareekh (Date):</span> <span class="val">${record.loading_date}</span></div>
-            <div class="row"><span>Driver:</span> <span class="val">${record.driver_name || 'N/A'} (${record.driver_mobile || 'N/A'})</span></div>
-            <div class="row"><span>Party:</span> <span class="val">${c.partyName || 'Direct'}</span></div>
-            <div class="row"><span>Maal / Item:</span> <span class="val">${c.item || ''} (${c.marka || ''})</span></div>
-            <div class="row"><span>Packing:</span> <span class="val">${c.packing || ''} | Moisture: ${c.moisture ? c.moisture + '%' : 'N/A'}</span></div>
-          </div>
+      const rows = (c.dhaange || []).map((d, idx) => [
+        `Dhaang Layer (${idx + 1})`,
+        `${d.bags} Bags`,
+        d.photoUrl ? 'Verified Proof' : 'No Photo'
+      ]);
 
-          <div class="box">
-            <div style="font-weight:bold; margin-bottom:6px; color:#047857;">Dhaang Breakdown</div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Layer</th>
-                  <th style="text-align:center;">Bags</th>
-                  <th style="text-align:right;">Photo Proof</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${dhaangRows}
-              </tbody>
-            </table>
-          </div>
+      doc.autoTable({
+        startY: 56,
+        head: [['Layer', 'Quantity', 'Verification']],
+        body: rows,
+        theme: 'striped',
+        styles: { fontSize: 10 },
+        didDrawCell: (data) => {
+          const dPhoto = c.dhaange?.[data.row.index]?.photoUrl;
+          if (data.section === 'body' && data.column.index === 2 && dPhoto) {
+            doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url: dPhoto });
+          }
+        }
+      });
 
-          <div class="net-box">
-            <span>Net Wajan: ${record.net_weight ? record.net_weight + ' KG' : 'N/A'}</span>
-            ${record.kanta_slip_url ? `<a href="${record.kanta_slip_url}" target="_blank" style="color:#2563eb; text-decoration:underline;">Kanta Slip Photo</a>` : ''}
-          </div>
-        </body>
-        </html>
-      `;
+      const finalY = doc.lastAutoTable.finalY + 10;
+      doc.text(`Net Weight: ${record.net_weight ? record.net_weight + ' KG' : 'N/A'}`, 14, finalY);
 
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'fixed';
-      iframe.style.width = '0';
-      iframe.style.height = '0';
-      iframe.style.border = '0';
-      document.body.appendChild(iframe);
-      iframe.contentDocument.write(slipContent);
-      iframe.contentDocument.close();
-      iframe.contentWindow.focus();
-      setTimeout(() => {
-        iframe.contentWindow.print();
-        document.body.removeChild(iframe);
-      }, 500);
+      const pdfBlob = doc.output('blob');
+      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `Slip - ${record.truck_number}`,
+          text: `Loading Slip for ${record.truck_number}`
+        });
+      } else {
+        doc.save(fileName);
+        alert("Slip file download trigger ho gayi hai!");
+      }
     } catch (e) {
-      alert("Slip load nahi ho payi: " + e.message);
+      alert("PDF banane me issue: " + e.message);
     }
   };
 
@@ -378,7 +390,7 @@ export default function App() {
     return matchSearch && matchStart && matchEnd;
   });
 
-  // 1. WELCOME / SPLASH SCREEN
+  // 1. SPLASH SCREEN
   if (showSplash) {
     return (
       <div 
@@ -388,8 +400,8 @@ export default function App() {
         <div className="absolute -top-24 -left-24 w-72 h-72 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="flex flex-col items-center text-center space-y-6 z-10 animate-fade-in">
-          <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-amber-400 via-orange-500 to-yellow-300 p-1 shadow-2xl shadow-amber-500/30 flex items-center justify-center transform hover:scale-105 transition">
+        <div className="flex flex-col items-center text-center space-y-6 z-10">
+          <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-amber-400 via-orange-500 to-yellow-300 p-1 shadow-2xl shadow-amber-500/30 flex items-center justify-center">
             <div className="w-full h-full bg-slate-950 rounded-[22px] flex items-center justify-center">
               <Truck className="w-12 h-12 text-amber-400" />
             </div>
@@ -415,7 +427,7 @@ export default function App() {
     );
   }
 
-  // 2. SECURITY PIN SCREEN
+  // 2. PIN LOGIN SCREEN
   if (!role) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-slate-900 to-blue-950 text-white flex flex-col items-center justify-center p-4 select-none">
@@ -493,7 +505,7 @@ export default function App() {
     );
   }
 
-  // 3. MAIN DASHBOARD
+  // 3. MAIN APP
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col items-center">
       <header className="w-full bg-white border-b-2 border-slate-200 shadow-sm sticky top-0 z-50">
@@ -1005,21 +1017,27 @@ export default function App() {
                       <span>Net Wt: <strong>{r.net_weight ? `${r.net_weight} kg` : 'N/A'}</strong></span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      {/* VIEW & EDIT */}
+                    {/* ACTION BUTTONS (Edit, WhatsApp Report & PDF) */}
+                    <div className="grid grid-cols-3 gap-1.5 pt-1">
                       <button
                         onClick={() => handleEditRecord(r)}
-                        className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 border border-slate-300 transition"
+                        className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs rounded-xl flex items-center justify-center gap-1 border border-slate-300 active:scale-95 transition"
                       >
-                        <Edit3 className="w-3.5 h-3.5 text-blue-600" /> View / Edit
+                        <Edit3 className="w-3.5 h-3.5 text-blue-600" /> Edit
                       </button>
 
-                      {/* SAVE PDF SLIP */}
                       <button
-                        onClick={() => generateAndSharePDF(r)}
-                        className="py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-purple-500/20 active:scale-98 transition"
+                        onClick={() => sendWhatsAppSlip(r)}
+                        className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl flex items-center justify-center gap-1 shadow-md active:scale-95 transition"
                       >
-                        <FileText className="w-3.5 h-3.5" /> Save PDF Slip
+                        <Share2 className="w-3.5 h-3.5" /> WhatsApp
+                      </button>
+
+                      <button
+                        onClick={() => handleShareOrDownloadPDF(r)}
+                        className="py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl flex items-center justify-center gap-1 shadow-md active:scale-95 transition"
+                      >
+                        <FileText className="w-3.5 h-3.5" /> PDF
                       </button>
                     </div>
                   </div>
