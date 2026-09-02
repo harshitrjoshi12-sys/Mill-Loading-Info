@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient.js';
+import { createClient } from '@supabase/supabase-js';
 import imageCompression from 'browser-image-compression';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { 
   Plus, Trash2, Camera, Search, FileText, ArrowRight, ArrowLeft, LogOut
 } from 'lucide-react';
+
+// DIRECT SUPABASE CLIENT (No export/import issues)
+const supabaseUrl = 'https://sofurgsfwulbhnnnarfj.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNvZnVyZ3Nmd3VsYmhubm5hcmZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzMzE3NTQsImV4cCI6MjEwMzkwNzc1NH0.xv2snfag5gf18BkzCqYaSlIQw-QjWryvpOcuqqYLm9U';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const FACTORIES = [
   { id: 'pragya', name: "Pragya Product", gradient: "from-blue-600 to-indigo-700", border: "border-blue-500" },
