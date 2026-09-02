@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import imageCompression from 'browser-image-compression';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import { 
-  Plus, Trash2, Camera, Image as ImageIcon, Search, FileText, ArrowRight, ArrowLeft, LogOut, Calendar, X, Edit3, Eye, CheckCircle2
+  Plus, Trash2, Camera, Image as ImageIcon, Search, ArrowRight, ArrowLeft, LogOut, Calendar, X, Edit3, CheckCircle2, Share2, Truck, Sparkles
 } from 'lucide-react';
 
 // DIRECT SUPABASE CLIENT
@@ -20,6 +22,9 @@ const PACKING_SIZES = ["50 kg", "40 kg", "30 kg", "25 kg", "Other"];
 const COUNTS = ["None", "500 count", "550 count", "600 count", "700 count", "750 count"];
 
 export default function App() {
+  // Splash Screen State
+  const [showSplash, setShowSplash] = useState(true);
+
   const [role, setRole] = useState(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
@@ -59,6 +64,14 @@ export default function App() {
   const [kantaPhoto, setKantaPhoto] = useState(null);
   const [kantaPreview, setKantaPreview] = useState('');
   const [kantaUrlSaved, setKantaUrlSaved] = useState('');
+
+  // 2.5 second auto-hide splash screen
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (role) fetchRecords();
@@ -156,7 +169,6 @@ export default function App() {
     setDhaange([{ bags: '', photo: null, preview: '', photoUrl: '' }]);
   };
 
-  // Load existing record for Viewing/Editing
   const handleEditRecord = (record) => {
     setEditingRecordId(record.id);
     setFactory(record.factory_name || FACTORIES[0].name);
@@ -244,7 +256,6 @@ export default function App() {
       };
 
       if (editingRecordId) {
-        // Update existing record
         const { error } = await supabase
           .from('truck_loadings')
           .update(payload)
@@ -252,7 +263,6 @@ export default function App() {
         if (error) throw new Error(error.message);
         alert("Entry Safaltapoorvak Update Ho Gayi!");
       } else {
-        // Insert new record
         const { error } = await supabase.from('truck_loadings').insert([payload]);
         if (error) throw new Error(error.message);
         alert("Truck Loading & Despatch Safaltapoorvak Save Ho Gaya!");
@@ -269,128 +279,114 @@ export default function App() {
     }
   };
 
-  // NATIVE ANDROID/PRINT PDF GENERATOR (100% Works in WebView & APK)
-  const generatePDF = (record) => {
+  const generateAndSharePDF = async (record) => {
     try {
-      const c = record.consignments?.[0] || {};
-      const dhaangRows = (c.dhaange || []).map((d, idx) => `
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 10px; font-weight: bold; color: #1e293b;">Dhaang (${idx + 1})</td>
-          <td style="padding: 10px; text-align: center; font-weight: 800; color: #047857;">${d.bags || 0} Bags</td>
-          <td style="padding: 10px; text-align: right;">
-            ${d.photoUrl ? `<a href="${d.photoUrl}" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: bold;">View Photo</a>` : '<span style="color:#94a3b8;">No Photo</span>'}
-          </td>
-        </tr>
-      `).join('');
+      const doc = new jsPDF();
+      const fileName = `LoadingSlip_${record.truck_number}_${record.loading_date}.pdf`;
 
-      const printHtml = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Slip_${record.truck_number}</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; color: #0f172a; margin: 0; background: #fff; }
-            .header { background: #1e3a8a; color: #fff; padding: 18px; border-radius: 12px; margin-bottom: 18px; text-align: center; }
-            .factory { font-size: 22px; font-weight: 900; letter-spacing: 1px; }
-            .sub { font-size: 11px; color: #fde047; font-weight: 700; margin-top: 4px; text-transform: uppercase; }
-            .card { border: 2px solid #cbd5e1; border-radius: 12px; padding: 14px; margin-bottom: 16px; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px; }
-            .val { font-weight: 800; color: #0f172a; font-size: 14px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
-            th { background: #f1f5f9; padding: 10px; text-align: left; font-weight: 800; color: #334155; }
-            .total-bar { background: #ecfdf5; border: 2px solid #10b981; padding: 12px; border-radius: 10px; margin-top: 14px; display: flex; justify-content: space-between; font-weight: 800; font-size: 15px; }
-            @media print {
-              body { padding: 0; }
-              .no-print { display: none; }
+      doc.setFillColor(30, 58, 138);
+      doc.rect(0, 0, 210, 28, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(18);
+      doc.setFont(undefined, 'bold');
+      doc.text((record.factory_name || 'FACTORY DESPATCH').toUpperCase(), 14, 18);
+      doc.setFontSize(9);
+      doc.setTextColor(253, 224, 71);
+      doc.text(`DESPATCH LOADING SLIP & DHANG VERIFICATION`, 14, 24);
+
+      doc.setTextColor(15, 23, 42);
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'bold');
+      doc.text(`Truck No: ${record.truck_number}`, 14, 38);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Date: ${record.loading_date}`, 140, 38);
+      doc.text(`Driver: ${record.driver_name || 'N/A'} (Mob: ${record.driver_mobile || 'N/A'})`, 14, 46);
+
+      let currentY = 54;
+      if (record.consignments && record.consignments.length > 0) {
+        const c = record.consignments[0];
+
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text(`Party / Customer: ${c.partyName || 'Direct'}`, 14, currentY);
+        currentY += 6;
+        doc.setFont(undefined, 'normal');
+        doc.text(`Item: ${c.item} | Marka: ${c.marka} | Packing: ${c.packing} | Count: ${c.count}`, 14, currentY);
+        currentY += 10;
+
+        doc.setFont(undefined, 'bold');
+        doc.text("Dhaang Layer Breakdown (Verification)", 14, currentY);
+        currentY += 4;
+
+        const tableBody = (c.dhaange || []).map((d, idx) => {
+          return [
+            `Layer (${idx + 1})`,
+            `${d.bags || 0} Bags`,
+            { 
+              content: d.photoUrl ? '[View Photo]' : 'No Photo', 
+              styles: d.photoUrl ? { textColor: [37, 99, 235], fontStyle: 'bold' } : { textColor: [148, 163, 184] }
             }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="factory">${(record.factory_name || 'FACTORY DESPATCH').toUpperCase()}</div>
-            <div class="sub">Despatch Loading Slip & Dhang Verification</div>
-          </div>
+          ];
+        });
 
-          <div class="card">
-            <div class="grid">
-              <div>Truck Number: <br><span class="val" style="font-size: 18px; color: #1e3a8a;">${record.truck_number}</span></div>
-              <div>Loading Date: <br><span class="val">${record.loading_date}</span></div>
-              <div>Driver Name: <br><span class="val">${record.driver_name || 'N/A'}</span></div>
-              <div>Driver Mobile: <br><span class="val">${record.driver_mobile || 'N/A'}</span></div>
-            </div>
-          </div>
+        doc.autoTable({
+          startY: currentY,
+          head: [['Layer Name', 'Bag Quantity', 'Photo Proof Link']],
+          body: tableBody,
+          theme: 'striped',
+          styles: { fontSize: 10, cellPadding: 4 },
+          headStyles: { fillColor: [241, 245, 249], textColor: [51, 65, 85] },
+          didDrawCell: (data) => {
+            const cInfo = record.consignments[0];
+            const dPhoto = cInfo.dhaange?.[data.row.index]?.photoUrl;
+            if (data.section === 'body' && data.column.index === 2 && dPhoto) {
+              doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url: dPhoto });
+            }
+          }
+        });
 
-          <div class="card">
-            <div class="grid">
-              <div>Party / Customer: <br><span class="val">${c.partyName || 'Direct'}</span></div>
-              <div>Item: <br><span class="val">${c.item || 'N/A'}</span></div>
-              <div>Brand / Marka: <br><span class="val">${c.marka || 'N/A'}</span></div>
-              <div>Packing Size: <br><span class="val">${c.packing || 'N/A'}</span></div>
-              <div>Count: <br><span class="val">${c.count || 'N/A'}</span></div>
-              <div>Moisture: <br><span class="val">${c.moisture ? c.moisture + '%' : 'N/A'}</span></div>
-            </div>
-          </div>
+        currentY = doc.lastAutoTable.finalY + 10;
+      }
 
-          <div class="card">
-            <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px; color: #047857;">Dhaang Breakdown</div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Layer</th>
-                  <th style="text-align: center;">Bags</th>
-                  <th style="text-align: right;">Photo Proof</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${dhaangRows || '<tr><td colspan="3" style="text-align:center; padding: 10px;">No Dhaang Recorded</td></tr>'}
-              </tbody>
-            </table>
-          </div>
+      doc.setFontSize(13);
+      doc.setFont(undefined, 'bold');
+      doc.text(`Net Weight: ${record.net_weight ? record.net_weight + ' KG' : 'Pending'}`, 14, currentY);
+      
+      if (record.kanta_slip_url) {
+        const kText = " [View Kanta Slip Photo]";
+        const kWidth = doc.getTextWidth(kText);
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(67, 56, 202);
+        doc.text(kText, 14, currentY + 7);
+        doc.link(14, currentY + 2, kWidth + 10, 8, { url: record.kanta_slip_url });
+      }
 
-          <div class="total-bar">
-            <span>Net Weight: ${record.net_weight ? record.net_weight + ' KG' : 'Pending'}</span>
-            ${record.kanta_slip_url ? `<a href="${record.kanta_slip_url}" target="_blank" style="color: #4338ca; text-decoration: underline;">View Kanta Slip</a>` : ''}
-          </div>
+      const pdfBase64 = doc.output('datauristring').split(',')[1];
+      const byteCharacters = atob(pdfBase64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+      const file = new File([blob], fileName, { type: 'application/pdf' });
 
-          <script>
-            window.onload = function() {
-              setTimeout(function() {
-                window.print();
-              }, 400);
-            };
-          </script>
-        </body>
-        </html>
-      `;
-
-      // Open print window / Save PDF dialog
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.open();
-        printWindow.document.write(printHtml);
-        printWindow.document.close();
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `Loading Slip - ${record.truck_number}`,
+          text: `Loading Slip for Vehicle ${record.truck_number} dated ${record.loading_date}`
+        });
       } else {
-        // Fallback for strict mobile webview
-        const iframe = document.createElement('iframe');
-        iframe.style.position = 'fixed';
-        iframe.style.right = '0';
-        iframe.style.bottom = '0';
-        iframe.style.width = '0';
-        iframe.style.height = '0';
-        iframe.style.border = '0';
-        document.body.appendChild(iframe);
-        iframe.contentDocument.write(printHtml);
-        iframe.contentDocument.close();
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
+        doc.save(fileName);
+        alert("Slip save/download ho gayi!");
       }
     } catch (e) {
-      alert("Slip load nahi ho payi: " + e.message);
+      alert("Slip Share nahi ho payi: " + e.message);
+      console.error(e);
     }
   };
 
-  // Filter Records by Truck No and Date
   const filteredRecords = records.filter(r => {
     const matchSearch = r.truck_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
                         (r.consignments?.[0]?.partyName || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -400,13 +396,51 @@ export default function App() {
     return matchSearch && matchStart && matchEnd;
   });
 
+  // 1. WELCOME / SPLASH SCREEN
+  if (showSplash) {
+    return (
+      <div 
+        onClick={() => setShowSplash(false)}
+        className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 text-white flex flex-col items-center justify-center p-6 select-none cursor-pointer relative overflow-hidden"
+      >
+        <div className="absolute -top-24 -left-24 w-72 h-72 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="flex flex-col items-center text-center space-y-6 z-10 animate-fade-in">
+          <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-amber-400 via-orange-500 to-yellow-300 p-1 shadow-2xl shadow-amber-500/30 flex items-center justify-center transform hover:scale-105 transition">
+            <div className="w-full h-full bg-slate-950 rounded-[22px] flex items-center justify-center">
+              <Truck className="w-12 h-12 text-amber-400" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <h1 className="text-4xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-400 uppercase drop-shadow-md">
+              Loading Detail
+            </h1>
+            <div className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-slate-800/80 border border-slate-700/60 shadow-inner">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <p className="text-sm font-bold tracking-widest text-slate-200">
+                Made by Harshit
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-8">
+            <div className="w-8 h-1 bg-gradient-to-r from-transparent via-amber-400 to-transparent rounded-full animate-pulse" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. SECURITY PIN SCREEN
   if (!role) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-slate-900 to-blue-950 text-white flex flex-col items-center justify-center p-4 select-none">
         <div className="w-full max-w-sm bg-slate-900/95 backdrop-blur-xl border border-indigo-500/30 rounded-3xl p-6 shadow-2xl flex flex-col items-center">
           
           <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-orange-300 to-yellow-400 tracking-wide text-center">
-            Mill Loading Desk
+            Loading Detail
           </h1>
           <p className="text-indigo-200 text-xs font-semibold mt-1">Terminal Security Login</p>
 
@@ -464,14 +498,20 @@ export default function App() {
             </button>
           </div>
 
-          <h2 className="text-sm font-black tracking-widest text-amber-300 uppercase mt-6 mb-2">
-            Enter PIN
-          </h2>
+          <div className="flex flex-col items-center mt-6 mb-1 space-y-1">
+            <h2 className="text-sm font-black tracking-widest text-amber-300 uppercase">
+              Enter PIN
+            </h2>
+            <span className="text-[11px] font-bold text-slate-400">
+              Made by Harshit
+            </span>
+          </div>
         </div>
       </div>
     );
   }
 
+  // 3. MAIN DASHBOARD
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col items-center">
       <header className="w-full bg-white border-b-2 border-slate-200 shadow-sm sticky top-0 z-50">
@@ -755,7 +795,7 @@ export default function App() {
                             className="w-20 bg-white border-2 border-emerald-400 p-2 rounded-xl font-mono text-base font-black text-slate-900 text-center outline-none"
                           />
 
-                          {/* DIRECT CAMERA CLICK BUTTON */}
+                          {/* DIRECT CAMERA CLICK */}
                           <label className={`p-2.5 rounded-xl border-2 flex items-center justify-center gap-1 cursor-pointer font-black text-xs transition ${
                             d.photo || d.preview || d.photoUrl
                               ? 'bg-emerald-600 text-white border-emerald-700' 
@@ -772,7 +812,7 @@ export default function App() {
                             />
                           </label>
 
-                          {/* GALLERY / FILE BUTTON */}
+                          {/* GALLERY / FILE */}
                           <label className="p-2.5 rounded-xl border-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-100 flex items-center justify-center cursor-pointer font-black text-xs transition">
                             <ImageIcon className="w-4 h-4" />
                             <input
@@ -828,7 +868,7 @@ export default function App() {
                       className="flex-1 bg-slate-50 border-2 border-slate-300 focus:border-indigo-500 focus:bg-white p-3 rounded-2xl font-mono text-base font-black text-slate-900 outline-none"
                     />
 
-                    {/* Direct Camera for Kanta */}
+                    {/* Camera for Kanta */}
                     <label className={`p-3.5 rounded-2xl border-2 flex items-center justify-center gap-1 cursor-pointer font-black text-xs transition ${
                       kantaPhoto || kantaUrlSaved || kantaPreview
                         ? 'bg-indigo-600 text-white border-indigo-700' 
@@ -984,7 +1024,7 @@ export default function App() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 pt-1">
-                      {/* VIEW & EDIT BUTTON */}
+                      {/* VIEW & EDIT */}
                       <button
                         onClick={() => handleEditRecord(r)}
                         className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 border border-slate-300 transition"
@@ -992,12 +1032,12 @@ export default function App() {
                         <Edit3 className="w-3.5 h-3.5 text-blue-600" /> View / Edit Entry
                       </button>
 
-                      {/* NATIVE PRINT / SAVE PDF BUTTON */}
+                      {/* SHARE PDF */}
                       <button
-                        onClick={() => generatePDF(r)}
+                        onClick={() => generateAndSharePDF(r)}
                         className="py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-purple-500/20 active:scale-98 transition"
                       >
-                        <FileText className="w-3.5 h-3.5" /> Print / Save PDF
+                        <Share2 className="w-3.5 h-3.5" /> Share PDF Slip
                       </button>
                     </div>
                   </div>
