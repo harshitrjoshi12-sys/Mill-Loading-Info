@@ -17,7 +17,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
@@ -28,15 +27,16 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install NPM Packages
-        run: npm ci
+      - name: Install Dependencies
+        run: npm install
 
-      - name: Build Web Dist
+      - name: Build Web App
         run: npm run build
 
-      - name: Initialize Capacitor Android
+      - name: Initialize Capacitor
         run: |
-          npx cap init "Mill Loading Desk" "com.mill.loading" --web-dir "dist"
+          npx @capacitor/cli init "Mill Loading Desk" "com.mill.loading" --web-dir "dist"
+          npm install @capacitor/android
           npx cap add android
           npx cap sync android
 
@@ -46,7 +46,7 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Upload APK as Artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: mill-loading-desk-app
