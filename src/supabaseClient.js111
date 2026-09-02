@@ -1,6 +1,1 @@
-import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://TERA-NAYA-PROJECT-ID.supabase.co';
-const supabaseAnonKey = 'TERI-NAYI-ANON-PUBLIC-KEY';
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
