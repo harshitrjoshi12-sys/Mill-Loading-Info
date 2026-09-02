@@ -4,10 +4,10 @@ import imageCompression from 'browser-image-compression';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { 
-  Plus, Trash2, Camera, Image as ImageIcon, Search, FileText, ArrowRight, ArrowLeft, LogOut, Calendar, X, Edit3, CheckCircle2, Share2, Truck, Sparkles
+  Plus, Trash2, Camera, Image as ImageIcon, Search, FileText, ArrowRight, ArrowLeft, LogOut, Calendar, X, Edit3, CheckCircle2, Share2, Truck, Sparkles, UserCheck
 } from 'lucide-react';
 
-// DIRECT SUPABASE CLIENT (Sabse safe tarika, kabhi break nahi hota)
+// DIRECT SUPABASE CLIENT
 const supabaseUrl = 'https://sofurgsfwulbhnnnarfj.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNvZnVyZ3Nmd3VsYmhubm5hcmZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzMzE3NTQsImV4cCI6MjEwMzkwNzc1NH0.xv2snfag5gf18BkzCqYaSlIQw-QjWryvpOcuqqYLm9U';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -47,6 +47,7 @@ export default function App() {
   // Form State
   const [factory, setFactory] = useState(FACTORIES[0].name);
   const [loadingDate, setLoadingDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [supervisorName, setSupervisorName] = useState('');
   const [partyName, setPartyName] = useState('');
   const [truckNo, setTruckNo] = useState('');
   const [driverName, setDriverName] = useState('');
@@ -66,7 +67,7 @@ export default function App() {
   const [kantaPreview, setKantaPreview] = useState('');
   const [kantaUrlSaved, setKantaUrlSaved] = useState('');
 
-  // Auto-hide Splash Screen after 2.5s
+  // Splash Screen auto-hide 2.5 seconds
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowSplash(false);
@@ -161,6 +162,7 @@ export default function App() {
     setTruckNo('');
     setDriverName('');
     setDriverMobile('');
+    setSupervisorName('');
     setMoistureVal('');
     setNetWeight('');
     setLoadingDate(new Date().toISOString().split('T')[0]);
@@ -174,6 +176,7 @@ export default function App() {
     setEditingRecordId(record.id);
     setFactory(record.factory_name || FACTORIES[0].name);
     setLoadingDate(record.loading_date || new Date().toISOString().split('T')[0]);
+    setSupervisorName(record.supervisor_name || '');
     setTruckNo(record.truck_number || '');
     setDriverName(record.driver_name || '');
     setDriverMobile(record.driver_mobile || '');
@@ -203,6 +206,28 @@ export default function App() {
 
     setActiveTab('new');
     setCurrentStep(1);
+  };
+
+  const handleDeleteRecord = async (recordId, truckNumber) => {
+    const confirmDelete = window.confirm(`Kya aap gaadi ${truckNumber} ka record pakka delete karna chahte hain?`);
+    if (!confirmDelete) return;
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('truck_loadings')
+        .delete()
+        .eq('id', recordId);
+
+      if (error) throw new Error(error.message);
+
+      alert("Record delete ho gaya!");
+      await fetchRecords();
+    } catch (err) {
+      alert("Delete nahi ho paya: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmitAll = async () => {
@@ -239,6 +264,7 @@ export default function App() {
         driver_name: driverName.trim(),
         driver_mobile: driverMobile.trim(),
         loading_date: loadingDate || new Date().toISOString().split('T')[0],
+        supervisor_name: supervisorName.trim() || 'Harshit',
         consignments: [
           {
             partyName: partyName.trim(),
@@ -280,7 +306,7 @@ export default function App() {
     }
   };
 
-  // 100% RELIABLE WHATSAPP DESPATCH REPORT (Har phone par turant kaam karega)
+  // WHATSAPP REPORT SLIP
   const sendWhatsAppSlip = (record) => {
     const c = record.consignments?.[0] || {};
     
@@ -289,6 +315,7 @@ export default function App() {
     msg += `*Factory:* ${record.factory_name}\n`;
     msg += `*Gaadi No:* ${record.truck_number}\n`;
     msg += `*Date:* ${record.loading_date}\n`;
+    msg += `*Loaded By (Supervisor):* ${record.supervisor_name || 'Harshit'}\n`;
     msg += `*Party:* ${c.partyName || 'Direct'}\n`;
     msg += `*Item:* ${c.item || ''} (${c.marka || ''})\n`;
     msg += `*Packing:* ${c.packing || ''} | *Moisture:* ${c.moisture ? c.moisture + '%' : 'N/A'}\n`;
@@ -299,7 +326,7 @@ export default function App() {
     (c.dhaange || []).forEach((d, idx) => {
       msg += `• Layer ${idx + 1}: *${d.bags || 0} Bags*`;
       if (d.photoUrl) {
-        msg += ` ➔ Photo: ${d.photoUrl}\n`;
+        msg += ` ➔ Photo Proof: ${d.photoUrl}\n`;
       } else {
         msg += ` (No Photo)\n`;
       }
@@ -317,11 +344,12 @@ export default function App() {
     window.open(`https://api.whatsapp.com/send?text=${encodedMsg}`, '_blank');
   };
 
-  // NATIVE SHARE / PDF LOGIC
-  const handleShareOrDownloadPDF = async (record) => {
+  // 100% RELIABLE DOWNLOAD VIA STORAGE LINK & BROWSER OPEN
+  const handleDownloadPDF = async (record) => {
     try {
+      setLoading(true);
       const doc = new jsPDF();
-      const fileName = `Loading_${record.truck_number}.pdf`;
+      const fileName = `Slip_${record.truck_number}_${record.loading_date}.pdf`;
 
       doc.setFillColor(30, 58, 138);
       doc.rect(0, 0, 210, 26, 'F');
@@ -334,11 +362,12 @@ export default function App() {
 
       const c = record.consignments?.[0] || {};
       doc.setTextColor(15, 23, 42);
-      doc.setFontSize(11);
+      doc.setFontSize(10);
       doc.text(`Vehicle No: ${record.truck_number}`, 14, 34);
       doc.text(`Date: ${record.loading_date}`, 140, 34);
-      doc.text(`Driver: ${record.driver_name || 'N/A'} (Mob: ${record.driver_mobile || 'N/A'})`, 14, 42);
-      doc.text(`Party: ${c.partyName || 'Direct'} | Item: ${c.item || ''} | Marka: ${c.marka || ''}`, 14, 50);
+      doc.text(`Loaded by Supervisor: ${record.supervisor_name || 'Harshit'}`, 14, 42);
+      doc.text(`Driver: ${record.driver_name || 'N/A'} (Mob: ${record.driver_mobile || 'N/A'})`, 140, 42);
+      doc.text(`Party: ${c.partyName || 'Direct'} | Item: ${c.item || ''} (${c.marka || ''}) | Packing: ${c.packing || ''}`, 14, 50);
 
       const rows = (c.dhaange || []).map((d, idx) => [
         `Dhaang Layer (${idx + 1})`,
@@ -348,7 +377,7 @@ export default function App() {
 
       doc.autoTable({
         startY: 56,
-        head: [['Layer', 'Quantity', 'Verification']],
+        head: [['Layer', 'Quantity', 'Photo Proof']],
         body: rows,
         theme: 'striped',
         styles: { fontSize: 10 },
@@ -363,27 +392,47 @@ export default function App() {
       const finalY = doc.lastAutoTable.finalY + 10;
       doc.text(`Net Weight: ${record.net_weight ? record.net_weight + ' KG' : 'N/A'}`, 14, finalY);
 
-      const pdfBlob = doc.output('blob');
-      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+      if (record.kanta_slip_url) {
+        doc.setTextColor(37, 99, 235);
+        doc.text("Kanta Slip Photo Proof (Tap to View)", 14, finalY + 8);
+        doc.link(14, finalY + 3, 70, 7, { url: record.kanta_slip_url });
+      }
 
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: `Slip - ${record.truck_number}`,
-          text: `Loading Slip for ${record.truck_number}`
+      // Convert PDF to blob & upload to bucket
+      const pdfBlob = doc.output('blob');
+      const uploadPath = `slips/${Date.now()}_${fileName}`;
+      const { error: uploadErr } = await supabase.storage
+        .from('loading-photos')
+        .upload(uploadPath, pdfBlob, {
+          contentType: 'application/pdf',
+          upsert: true
         });
-      } else {
+
+      if (uploadErr) {
+        // Fallback direct download
         doc.save(fileName);
-        alert("Slip file download trigger ho gayi hai!");
+      } else {
+        const { data: publicData } = supabase.storage
+          .from('loading-photos')
+          .getPublicUrl(uploadPath);
+
+        if (publicData?.publicUrl) {
+          window.open(publicData.publicUrl, '_system');
+        } else {
+          doc.save(fileName);
+        }
       }
     } catch (e) {
-      alert("PDF banane me issue: " + e.message);
+      alert("PDF Error: " + e.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   const filteredRecords = records.filter(r => {
     const matchSearch = r.truck_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        (r.consignments?.[0]?.partyName || '').toLowerCase().includes(searchQuery.toLowerCase());
+                        (r.consignments?.[0]?.partyName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        (r.supervisor_name || '').toLowerCase().includes(searchQuery.toLowerCase());
     const itemDate = r.loading_date;
     const matchStart = filterStartDate ? itemDate >= filterStartDate : true;
     const matchEnd = filterEndDate ? itemDate <= filterEndDate : true;
@@ -561,7 +610,7 @@ export default function App() {
 
             {currentStep === 1 && (
               <div className="space-y-4">
-                {/* 1. Factory */}
+                {/* 1. Factory Unit */}
                 <div className="bg-white p-5 rounded-3xl border-2 border-blue-200 shadow-sm space-y-3">
                   <h2 className="text-base font-black uppercase tracking-wide text-blue-700 flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs">1</span>
@@ -585,19 +634,33 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 2. Loading Date */}
-                <div className="bg-white p-5 rounded-3xl border-2 border-indigo-200 shadow-sm space-y-2">
+                {/* 2. Loading Date & Loaded by Supervisor Name (Side by Side) */}
+                <div className="bg-white p-5 rounded-3xl border-2 border-indigo-200 shadow-sm space-y-3">
                   <h2 className="text-base font-black uppercase tracking-wide text-indigo-700 flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs">2</span>
-                    Loading Date
+                    Date & Supervisor
                   </h2>
-                  <div className="relative">
-                    <input
-                      type="date"
-                      value={loadingDate}
-                      onChange={(e) => setLoadingDate(e.target.value)}
-                      className="w-full bg-indigo-50/50 border-2 border-indigo-300 focus:border-indigo-600 focus:bg-white p-3.5 rounded-2xl font-mono text-base font-black text-slate-800 outline-none"
-                    />
+                  
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="text-xs font-black text-slate-700 block mb-1">Loading Date</label>
+                      <input
+                        type="date"
+                        value={loadingDate}
+                        onChange={(e) => setLoadingDate(e.target.value)}
+                        className="w-full bg-indigo-50/50 border-2 border-indigo-300 focus:border-indigo-600 focus:bg-white p-3 rounded-xl font-mono text-sm font-black text-slate-800 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-black text-slate-700 block mb-1">Loaded by Name</label>
+                      <input
+                        type="text"
+                        placeholder="Supervisor Name"
+                        value={supervisorName}
+                        onChange={(e) => setSupervisorName(e.target.value)}
+                        className="w-full bg-indigo-50/50 border-2 border-indigo-300 focus:border-indigo-600 focus:bg-white p-3 rounded-xl text-sm font-bold text-slate-800 outline-none"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -789,7 +852,7 @@ export default function App() {
                             className="w-20 bg-white border-2 border-emerald-400 p-2 rounded-xl font-mono text-base font-black text-slate-900 text-center outline-none"
                           />
 
-                          {/* DIRECT CAMERA CLICK */}
+                          {/* DIRECT LIVE CAMERA CLICK BUTTON */}
                           <label className={`p-2.5 rounded-xl border-2 flex items-center justify-center gap-1 cursor-pointer font-black text-xs transition ${
                             d.photo || d.preview || d.photoUrl
                               ? 'bg-emerald-600 text-white border-emerald-700' 
@@ -806,7 +869,7 @@ export default function App() {
                             />
                           </label>
 
-                          {/* GALLERY / FILE */}
+                          {/* GALLERY / FILE BUTTON */}
                           <label className="p-2.5 rounded-xl border-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-100 flex items-center justify-center cursor-pointer font-black text-xs transition">
                             <ImageIcon className="w-4 h-4" />
                             <input
@@ -929,7 +992,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: SEARCH, DATE FILTER, VIEW/EDIT & PDF */}
+        {/* TAB 2: SEARCH, DATE FILTER, VIEW/EDIT, DELETE & PDF */}
         {activeTab === 'history' && (
           <div className="space-y-4">
             {/* Search Box */}
@@ -937,7 +1000,7 @@ export default function App() {
               <Search className="w-4 h-4 text-slate-400 absolute left-4 top-4" />
               <input
                 type="text"
-                placeholder="Search Truck No or Party..."
+                placeholder="Search Truck No, Party, or Supervisor..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="w-full bg-white border-2 border-slate-300 p-3.5 pl-11 rounded-2xl text-sm font-bold text-slate-900 placeholder-slate-400 outline-none focus:border-purple-500 shadow-sm"
@@ -998,13 +1061,18 @@ export default function App() {
                     <div className="flex justify-between items-start">
                       <div>
                         <h4 className="font-mono font-black text-lg text-slate-900">{r.truck_number}</h4>
-                        <div className="flex items-center gap-2 mt-0.5">
+                        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                           <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
                             {r.factory_name}
                           </span>
                           <span className="text-xs font-black font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md flex items-center gap-1">
                             <Calendar className="w-3 h-3" /> {r.loading_date}
                           </span>
+                          {r.supervisor_name && (
+                            <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                              <UserCheck className="w-3 h-3 text-indigo-600" /> {r.supervisor_name}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <span className="text-xs font-black uppercase px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-800 flex items-center gap-1">
@@ -1017,8 +1085,9 @@ export default function App() {
                       <span>Net Wt: <strong>{r.net_weight ? `${r.net_weight} kg` : 'N/A'}</strong></span>
                     </div>
 
-                    {/* ACTION BUTTONS (Edit, WhatsApp Report & PDF) */}
-                    <div className="grid grid-cols-3 gap-1.5 pt-1">
+                    {/* ACTION BUTTONS (Edit, Delete, WhatsApp, PDF) */}
+                    <div className="grid grid-cols-4 gap-1.5 pt-1">
+                      {/* EDIT */}
                       <button
                         onClick={() => handleEditRecord(r)}
                         className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs rounded-xl flex items-center justify-center gap-1 border border-slate-300 active:scale-95 transition"
@@ -1026,15 +1095,25 @@ export default function App() {
                         <Edit3 className="w-3.5 h-3.5 text-blue-600" /> Edit
                       </button>
 
+                      {/* DELETE */}
+                      <button
+                        onClick={() => handleDeleteRecord(r.id, r.truck_number)}
+                        className="py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-black text-xs rounded-xl flex items-center justify-center gap-1 border border-rose-300 active:scale-95 transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" /> Del
+                      </button>
+
+                      {/* WHATSAPP */}
                       <button
                         onClick={() => sendWhatsAppSlip(r)}
                         className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl flex items-center justify-center gap-1 shadow-md active:scale-95 transition"
                       >
-                        <Share2 className="w-3.5 h-3.5" /> WhatsApp
+                        <Share2 className="w-3.5 h-3.5" /> WA
                       </button>
 
+                      {/* PDF DOWNLOAD */}
                       <button
-                        onClick={() => handleShareOrDownloadPDF(r)}
+                        onClick={() => handleDownloadPDF(r)}
                         className="py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl flex items-center justify-center gap-1 shadow-md active:scale-95 transition"
                       >
                         <FileText className="w-3.5 h-3.5" /> PDF
