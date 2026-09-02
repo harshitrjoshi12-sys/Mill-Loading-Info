@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
+import { supabase } from './supabaseClient.js';
 import imageCompression from 'browser-image-compression';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { 
-  Plus, Trash2, Camera, Search, FileText, ArrowRight, ArrowLeft, LogOut, CheckCircle, Image
+  Plus, Trash2, Camera, Search, FileText, ArrowRight, ArrowLeft, LogOut
 } from 'lucide-react';
 
 const FACTORIES = [
@@ -17,32 +17,32 @@ const PACKING_SIZES = ["50 kg", "40 kg", "30 kg", "25 kg", "Other"];
 const COUNTS = ["None", "500 count", "550 count", "600 count", "700 count", "750 count"];
 
 export default function App() {
-  const [role, setRole] = useState(null); // 'munim' | 'admin'
+  const [role, setRole] = useState(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
   
-  const [activeTab, setActiveTab] = useState('new'); // 'new' | 'history'
+  const [activeTab, setActiveTab] = useState('new');
   const [currentStep, setCurrentStep] = useState(1);
   
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Form State (Page 2)
+  // Form State
   const [factory, setFactory] = useState(FACTORIES[0].name);
   const [partyName, setPartyName] = useState('');
   const [truckNo, setTruckNo] = useState('');
   const [driverName, setDriverName] = useState('');
   const [driverMobile, setDriverMobile] = useState('');
 
-  // Product Details (Page 4)
+  // Product Details
   const [itemType, setItemType] = useState(ITEMS[0]);
   const [brandMarka, setBrandMarka] = useState(MARKAS[0]);
   const [countVal, setCountVal] = useState(COUNTS[0]);
   const [moistureVal, setMoistureVal] = useState('');
   const [packageSize, setPackageSize] = useState(PACKING_SIZES[0]);
 
-  // Dhaang & Weight (Last Page)
+  // Dhaang & Weight
   const [dhaange, setDhaange] = useState([{ bags: '', photo: null, preview: '' }]);
   const [netWeight, setNetWeight] = useState('');
   const [kantaPhoto, setKantaPhoto] = useState(null);
@@ -91,7 +91,6 @@ export default function App() {
     }
   };
 
-  // Safe file upload with fallback
   const compressAndUpload = async (file) => {
     if (!file) return null;
     try {
@@ -105,14 +104,14 @@ export default function App() {
         .upload(fileName, compressed, { upsert: true });
 
       if (uploadError) {
-        console.warn("Storage upload failed, trying base64 preview:", uploadError.message);
+        console.warn("Storage upload warning:", uploadError.message);
         return null;
       }
 
       const { data } = supabase.storage.from('loading-photos').getPublicUrl(fileName);
       return data?.publicUrl || null;
     } catch (err) {
-      console.error("Upload handler error:", err);
+      console.error("Upload error:", err);
       return null;
     }
   };
@@ -137,12 +136,15 @@ export default function App() {
 
     setLoading(true);
     try {
-      // 1. Process Dhaang photos
       const processedDhaange = await Promise.all(
         dhaange.map(async (d) => {
           let photoUrl = '';
           if (d.photo) {
-            photoUrl = await compressAndUpload(d.photo);
+            try {
+              photoUrl = await compressAndUpload(d.photo) || d.preview || '';
+            } catch (e) {
+              photoUrl = d.preview || '';
+            }
           }
           return {
             bags: Number(d.bags) || 0,
@@ -151,13 +153,15 @@ export default function App() {
         })
       );
 
-      // 2. Process Kanta Slip Photo
       let kantaUrl = '';
       if (kantaPhoto) {
-        kantaUrl = await compressAndUpload(kantaPhoto);
+        try {
+          kantaUrl = await compressAndUpload(kantaPhoto) || kantaPreview || '';
+        } catch (e) {
+          kantaUrl = kantaPreview || '';
+        }
       }
 
-      // 3. Payload build
       const payload = {
         factory_name: factory,
         truck_number: truckNo.toUpperCase().trim(),
@@ -178,18 +182,17 @@ export default function App() {
         net_weight: netWeight ? Number(netWeight) : null,
         kanta_slip_url: kantaUrl || null,
         status: 'fully_completed',
-        created_by_role: role
+        created_by_role: role || 'munim'
       };
 
       const { error } = await supabase.from('truck_loadings').insert([payload]);
 
       if (error) {
-        throw new Error(error.message || "Database insert error");
+        throw new Error(error.message);
       }
 
       alert("Truck Loading & Despatch Safaltapoorvak Save Ho Gaya!");
       
-      // Reset Form
       setCurrentStep(1);
       setPartyName('');
       setTruckNo('');
@@ -255,9 +258,6 @@ export default function App() {
     doc.save(`Loading_${record.truck_number}.pdf`);
   };
 
-  // ==========================================
-  // PAGE 1: PASSKEY KEYPAD (NO PASSWORD HINTS DISPLAYED)
-  // ==========================================
   if (!role) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-slate-900 to-blue-950 text-white flex flex-col items-center justify-center p-4 select-none">
@@ -268,7 +268,6 @@ export default function App() {
           </h1>
           <p className="text-indigo-200 text-xs font-semibold mt-1">Terminal Security Login</p>
 
-          {/* PIN DOTS */}
           <div className="flex justify-center gap-3 my-6">
             {[0, 1, 2, 3].map((idx) => (
               <div
@@ -290,7 +289,6 @@ export default function App() {
             </p>
           )}
 
-          {/* 3x4 KEYPAD */}
           <div className="grid grid-cols-3 gap-3 w-full">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
               <button
@@ -327,22 +325,15 @@ export default function App() {
           <h2 className="text-sm font-black tracking-widest text-amber-300 uppercase mt-6 mb-2">
             Enter PIN
           </h2>
-          {/* PASSWORD HINT COMPLETELY REMOVED */}
         </div>
       </div>
     );
   }
 
-  // ==========================================
-  // PAGES (CENTERED & MODERN)
-  // ==========================================
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col items-center">
-      
-      {/* TOP HEADER */}
       <header className="w-full bg-white border-b-2 border-slate-200 shadow-sm sticky top-0 z-50">
         <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          
           <button 
             onClick={() => { setRole(null); setCurrentStep(1); }} 
             className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border-2 border-rose-300 rounded-xl text-xs font-black flex items-center gap-1 transition"
@@ -350,7 +341,6 @@ export default function App() {
             <LogOut className="w-3.5 h-3.5" /> Exit
           </button>
 
-          {/* TWO MAIN TABS ONLY */}
           <div className="flex gap-2 flex-1 justify-end">
             <button
               onClick={() => { setActiveTab('new'); setCurrentStep(1); }}
@@ -373,22 +363,14 @@ export default function App() {
               Search & PDF
             </button>
           </div>
-
         </div>
       </header>
 
-      {/* MAIN CONTAINER */}
       <main className="w-full max-w-md p-4 pb-24 flex flex-col justify-center">
-
-        {/* TAB 1: NEW TRUCK */}
         {activeTab === 'new' && (
           <div className="space-y-6">
-
-            {/* PAGE 2 */}
             {currentStep === 1 && (
-              <div className="space-y-4 animate-fadeIn">
-                
-                {/* 1> Factory Unit */}
+              <div className="space-y-4">
                 <div className="bg-white p-5 rounded-3xl border-2 border-blue-200 shadow-sm space-y-3">
                   <h2 className="text-base font-black uppercase tracking-wide text-blue-700 flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs">1</span>
@@ -412,7 +394,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 2> Party Detail */}
                 <div className="bg-white p-5 rounded-3xl border-2 border-teal-200 shadow-sm space-y-2">
                   <h2 className="text-base font-black uppercase tracking-wide text-teal-700 flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs">2</span>
@@ -428,7 +409,6 @@ export default function App() {
                   />
                 </div>
 
-                {/* 3> Truck Detail */}
                 <div className="bg-white p-5 rounded-3xl border-2 border-amber-200 shadow-sm space-y-3">
                   <h2 className="text-base font-black uppercase tracking-wide text-amber-700 flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-xs">3</span>
@@ -483,9 +463,8 @@ export default function App() {
               </div>
             )}
 
-            {/* PAGE 4 */}
             {currentStep === 2 && (
-              <div className="space-y-4 animate-fadeIn">
+              <div className="space-y-4">
                 <div className="bg-white p-5 rounded-3xl border-2 border-purple-200 shadow-sm space-y-4">
                   <h2 className="text-base font-black uppercase tracking-wide text-purple-700 border-b pb-2 flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs">4</span>
@@ -568,11 +547,8 @@ export default function App() {
               </div>
             )}
 
-            {/* LAST PAGE */}
             {currentStep === 3 && (
-              <div className="space-y-4 animate-fadeIn">
-                
-                {/* 5> Dhaang Detail */}
+              <div className="space-y-4">
                 <div className="bg-white p-5 rounded-3xl border-2 border-emerald-200 shadow-sm space-y-4">
                   <div className="flex justify-between items-center border-b pb-2">
                     <h2 className="text-base font-black uppercase tracking-wide text-emerald-700 flex items-center gap-2">
@@ -604,7 +580,6 @@ export default function App() {
                             className="w-24 bg-white border-2 border-emerald-400 p-2.5 rounded-xl font-mono text-base font-black text-slate-900 text-center outline-none"
                           />
 
-                          {/* CAMERA / GALLERY INPUT (NO HARDCODED CAPTURE SO BOTH OPTIONS SHOW) */}
                           <label className={`flex-1 py-2.5 px-3 rounded-xl border-2 flex items-center justify-center gap-1.5 cursor-pointer font-black text-xs transition ${
                             d.photo || d.preview 
                               ? 'bg-emerald-500 text-white border-emerald-600' 
@@ -649,7 +624,6 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* 6> Weight Slip */}
                 <div className="bg-white p-5 rounded-3xl border-2 border-indigo-200 shadow-sm space-y-3">
                   <h2 className="text-base font-black uppercase tracking-wide text-indigo-700 border-b pb-2 flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs">6</span>
@@ -666,7 +640,6 @@ export default function App() {
                       className="flex-1 bg-slate-50 border-2 border-slate-300 focus:border-indigo-500 focus:bg-white p-3.5 rounded-2xl font-mono text-base font-black text-slate-900 outline-none"
                     />
 
-                    {/* Slip photo from Camera or Gallery */}
                     <label className={`py-3.5 px-5 rounded-2xl border-2 flex items-center justify-center gap-2 cursor-pointer font-black text-xs transition ${
                       kantaPhoto 
                         ? 'bg-indigo-600 text-white border-indigo-700' 
@@ -695,7 +668,6 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Final Submit Action Buttons */}
                 <div className="flex gap-3">
                   <button
                     type="button"
@@ -713,14 +685,11 @@ export default function App() {
                     {loading ? 'Saving & Dispatching...' : 'Save & Despatch'}
                   </button>
                 </div>
-
               </div>
             )}
-
           </div>
         )}
 
-        {/* TAB 2: SEARCH & PDF */}
         {activeTab === 'history' && (
           <div className="space-y-4">
             <div className="relative">
@@ -769,7 +738,6 @@ export default function App() {
             </div>
           </div>
         )}
-
       </main>
     </div>
   );
