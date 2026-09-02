@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import imageCompression from 'browser-image-compression';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import { 
-  Plus, Trash2, Camera, Image as ImageIcon, Search, FileText, ArrowRight, ArrowLeft, LogOut, Calendar, X
+  Plus, Trash2, Camera, Image as ImageIcon, Search, FileText, ArrowRight, ArrowLeft, LogOut, Calendar, X, Edit3, Eye, CheckCircle2
 } from 'lucide-react';
 
-// DIRECT SUPABASE CLIENT (No import/export mismatch issues)
+// DIRECT SUPABASE CLIENT
 const supabaseUrl = 'https://sofurgsfwulbhnnnarfj.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNvZnVyZ3Nmd3VsYmhubm5hcmZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzMzE3NTQsImV4cCI6MjEwMzkwNzc1NH0.xv2snfag5gf18BkzCqYaSlIQw-QjWryvpOcuqqYLm9U';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -37,6 +35,9 @@ export default function App() {
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
 
+  // Editing State
+  const [editingRecordId, setEditingRecordId] = useState(null);
+
   // Form State
   const [factory, setFactory] = useState(FACTORIES[0].name);
   const [loadingDate, setLoadingDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -53,10 +54,11 @@ export default function App() {
   const [packageSize, setPackageSize] = useState(PACKING_SIZES[0]);
 
   // Dhaang & Weight
-  const [dhaange, setDhaange] = useState([{ bags: '', photo: null, preview: '' }]);
+  const [dhaange, setDhaange] = useState([{ bags: '', photo: null, preview: '', photoUrl: '' }]);
   const [netWeight, setNetWeight] = useState('');
   const [kantaPhoto, setKantaPhoto] = useState(null);
   const [kantaPreview, setKantaPreview] = useState('');
+  const [kantaUrlSaved, setKantaUrlSaved] = useState('');
 
   useEffect(() => {
     if (role) fetchRecords();
@@ -138,6 +140,58 @@ export default function App() {
     return dhaange.reduce((sum, d) => sum + (Number(d.bags) || 0), 0);
   };
 
+  const resetForm = () => {
+    setEditingRecordId(null);
+    setCurrentStep(1);
+    setPartyName('');
+    setTruckNo('');
+    setDriverName('');
+    setDriverMobile('');
+    setMoistureVal('');
+    setNetWeight('');
+    setLoadingDate(new Date().toISOString().split('T')[0]);
+    setKantaPhoto(null);
+    setKantaPreview('');
+    setKantaUrlSaved('');
+    setDhaange([{ bags: '', photo: null, preview: '', photoUrl: '' }]);
+  };
+
+  // Load existing record for Viewing/Editing
+  const handleEditRecord = (record) => {
+    setEditingRecordId(record.id);
+    setFactory(record.factory_name || FACTORIES[0].name);
+    setLoadingDate(record.loading_date || new Date().toISOString().split('T')[0]);
+    setTruckNo(record.truck_number || '');
+    setDriverName(record.driver_name || '');
+    setDriverMobile(record.driver_mobile || '');
+    setNetWeight(record.net_weight ? String(record.net_weight) : '');
+    setKantaUrlSaved(record.kanta_slip_url || '');
+    setKantaPreview(record.kanta_slip_url || '');
+
+    if (record.consignments && record.consignments.length > 0) {
+      const c = record.consignments[0];
+      setPartyName(c.partyName || '');
+      setItemType(c.item || ITEMS[0]);
+      setBrandMarka(c.marka || MARKAS[0]);
+      setCountVal(c.count || COUNTS[0]);
+      setMoistureVal(c.moisture || '');
+      setPackageSize(c.packing || PACKING_SIZES[0]);
+      if (c.dhaange && c.dhaange.length > 0) {
+        setDhaange(c.dhaange.map(d => ({
+          bags: d.bags || '',
+          photo: null,
+          preview: d.photoUrl || '',
+          photoUrl: d.photoUrl || ''
+        })));
+      } else {
+        setDhaange([{ bags: '', photo: null, preview: '', photoUrl: '' }]);
+      }
+    }
+
+    setActiveTab('new');
+    setCurrentStep(1);
+  };
+
   const handleSubmitAll = async () => {
     if (!truckNo.trim()) {
       alert("Kripya Vehicle No. bharein!");
@@ -148,28 +202,22 @@ export default function App() {
     try {
       const processedDhaange = await Promise.all(
         dhaange.map(async (d) => {
-          let photoUrl = '';
+          let finalPhotoUrl = d.photoUrl || '';
           if (d.photo) {
-            try {
-              photoUrl = await compressAndUpload(d.photo) || d.preview || '';
-            } catch (e) {
-              photoUrl = d.preview || '';
-            }
+            const uploaded = await compressAndUpload(d.photo);
+            if (uploaded) finalPhotoUrl = uploaded;
           }
           return {
             bags: Number(d.bags) || 0,
-            photoUrl: photoUrl || ''
+            photoUrl: finalPhotoUrl
           };
         })
       );
 
-      let kantaUrl = '';
+      let finalKantaUrl = kantaUrlSaved || '';
       if (kantaPhoto) {
-        try {
-          kantaUrl = await compressAndUpload(kantaPhoto) || kantaPreview || '';
-        } catch (e) {
-          kantaUrl = kantaPreview || '';
-        }
+        const uploadedKanta = await compressAndUpload(kantaPhoto);
+        if (uploadedKanta) finalKantaUrl = uploadedKanta;
       }
 
       const payload = {
@@ -190,31 +238,27 @@ export default function App() {
           }
         ],
         net_weight: netWeight ? Number(netWeight) : null,
-        kanta_slip_url: kantaUrl || null,
+        kanta_slip_url: finalKantaUrl || null,
         status: 'fully_completed',
         created_by_role: role || 'munim'
       };
 
-      const { error } = await supabase.from('truck_loadings').insert([payload]);
-
-      if (error) {
-        throw new Error(error.message);
+      if (editingRecordId) {
+        // Update existing record
+        const { error } = await supabase
+          .from('truck_loadings')
+          .update(payload)
+          .eq('id', editingRecordId);
+        if (error) throw new Error(error.message);
+        alert("Entry Safaltapoorvak Update Ho Gayi!");
+      } else {
+        // Insert new record
+        const { error } = await supabase.from('truck_loadings').insert([payload]);
+        if (error) throw new Error(error.message);
+        alert("Truck Loading & Despatch Safaltapoorvak Save Ho Gaya!");
       }
 
-      alert("Truck Loading & Despatch Safaltapoorvak Save Ho Gaya!");
-      
-      setCurrentStep(1);
-      setPartyName('');
-      setTruckNo('');
-      setDriverName('');
-      setDriverMobile('');
-      setMoistureVal('');
-      setNetWeight('');
-      setLoadingDate(new Date().toISOString().split('T')[0]);
-      setKantaPhoto(null);
-      setKantaPreview('');
-      setDhaange([{ bags: '', photo: null, preview: '' }]);
-      
+      resetForm();
       await fetchRecords();
       setActiveTab('history');
     } catch (err) {
@@ -225,73 +269,124 @@ export default function App() {
     }
   };
 
-  const generatePDF = async (record) => {
+  // NATIVE ANDROID/PRINT PDF GENERATOR (100% Works in WebView & APK)
+  const generatePDF = (record) => {
     try {
-      const doc = new jsPDF();
-      doc.setFillColor(30, 58, 138);
-      doc.rect(0, 0, 210, 28, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(16);
-      doc.text(record.factory_name.toUpperCase(), 14, 18);
-      doc.setFontSize(9);
-      doc.setTextColor(253, 224, 71);
-      doc.text(`DESPATCH LOADING SLIP & DHANG VERIFICATION`, 14, 24);
+      const c = record.consignments?.[0] || {};
+      const dhaangRows = (c.dhaange || []).map((d, idx) => `
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 10px; font-weight: bold; color: #1e293b;">Dhaang (${idx + 1})</td>
+          <td style="padding: 10px; text-align: center; font-weight: 800; color: #047857;">${d.bags || 0} Bags</td>
+          <td style="padding: 10px; text-align: right;">
+            ${d.photoUrl ? `<a href="${d.photoUrl}" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: bold;">View Photo</a>` : '<span style="color:#94a3b8;">No Photo</span>'}
+          </td>
+        </tr>
+      `).join('');
 
-      doc.setTextColor(15, 23, 42);
-      doc.setFontSize(11);
-      doc.text(`Vehicle No: ${record.truck_number}`, 14, 38);
-      doc.text(`Date: ${record.loading_date}`, 140, 38);
-      doc.text(`Driver: ${record.driver_name || 'N/A'} (Mob: ${record.driver_mobile || 'N/A'})`, 14, 46);
+      const printHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Slip_${record.truck_number}</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; color: #0f172a; margin: 0; background: #fff; }
+            .header { background: #1e3a8a; color: #fff; padding: 18px; border-radius: 12px; margin-bottom: 18px; text-align: center; }
+            .factory { font-size: 22px; font-weight: 900; letter-spacing: 1px; }
+            .sub { font-size: 11px; color: #fde047; font-weight: 700; margin-top: 4px; text-transform: uppercase; }
+            .card { border: 2px solid #cbd5e1; border-radius: 12px; padding: 14px; margin-bottom: 16px; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px; }
+            .val { font-weight: 800; color: #0f172a; font-size: 14px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+            th { background: #f1f5f9; padding: 10px; text-align: left; font-weight: 800; color: #334155; }
+            .total-bar { background: #ecfdf5; border: 2px solid #10b981; padding: 12px; border-radius: 10px; margin-top: 14px; display: flex; justify-content: space-between; font-weight: 800; font-size: 15px; }
+            @media print {
+              body { padding: 0; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="factory">${(record.factory_name || 'FACTORY DESPATCH').toUpperCase()}</div>
+            <div class="sub">Despatch Loading Slip & Dhang Verification</div>
+          </div>
 
-      let currentY = 56;
-      if (record.consignments && record.consignments.length > 0) {
-        const c = record.consignments[0];
-        doc.text(`Party: ${c.partyName || 'Direct'} | Item: ${c.item} | Marka: ${c.marka} | Packing: ${c.packing}`, 14, currentY);
-        currentY += 8;
+          <div class="card">
+            <div class="grid">
+              <div>Truck Number: <br><span class="val" style="font-size: 18px; color: #1e3a8a;">${record.truck_number}</span></div>
+              <div>Loading Date: <br><span class="val">${record.loading_date}</span></div>
+              <div>Driver Name: <br><span class="val">${record.driver_name || 'N/A'}</span></div>
+              <div>Driver Mobile: <br><span class="val">${record.driver_mobile || 'N/A'}</span></div>
+            </div>
+          </div>
 
-        const rows = (c.dhaange || []).map((d, idx) => [
-          `Dhaang (${idx + 1})`,
-          `${d.bags} Bags`,
-          d.photoUrl ? 'Verified' : 'No Photo'
-        ]);
+          <div class="card">
+            <div class="grid">
+              <div>Party / Customer: <br><span class="val">${c.partyName || 'Direct'}</span></div>
+              <div>Item: <br><span class="val">${c.item || 'N/A'}</span></div>
+              <div>Brand / Marka: <br><span class="val">${c.marka || 'N/A'}</span></div>
+              <div>Packing Size: <br><span class="val">${c.packing || 'N/A'}</span></div>
+              <div>Count: <br><span class="val">${c.count || 'N/A'}</span></div>
+              <div>Moisture: <br><span class="val">${c.moisture ? c.moisture + '%' : 'N/A'}</span></div>
+            </div>
+          </div>
 
-        doc.autoTable({
-          startY: currentY,
-          head: [['Dhaang Layer', 'Quantity', 'Photo Proof']],
-          body: rows,
-          theme: 'striped',
-          styles: { fontSize: 9 }
-        });
+          <div class="card">
+            <div style="font-weight: 800; font-size: 14px; margin-bottom: 6px; color: #047857;">Dhaang Breakdown</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Layer</th>
+                  <th style="text-align: center;">Bags</th>
+                  <th style="text-align: right;">Photo Proof</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${dhaangRows || '<tr><td colspan="3" style="text-align:center; padding: 10px;">No Dhaang Recorded</td></tr>'}
+              </tbody>
+            </table>
+          </div>
 
-        currentY = doc.lastAutoTable.finalY + 10;
-      }
+          <div class="total-bar">
+            <span>Net Weight: ${record.net_weight ? record.net_weight + ' KG' : 'Pending'}</span>
+            ${record.kanta_slip_url ? `<a href="${record.kanta_slip_url}" target="_blank" style="color: #4338ca; text-decoration: underline;">View Kanta Slip</a>` : ''}
+          </div>
 
-      doc.text(`Net Weight: ${record.net_weight || 'N/A'} kg`, 14, currentY);
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.print();
+              }, 400);
+            };
+          </script>
+        </body>
+        </html>
+      `;
 
-      const fileName = `Loading_${record.truck_number}_${record.loading_date}.pdf`;
-      const pdfBlob = doc.output('blob');
-
-      // Native Mobile Share / Save
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([pdfBlob], fileName, { type: 'application/pdf' })] })) {
-        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-        await navigator.share({
-          files: [file],
-          title: `Loading Slip - ${record.truck_number}`,
-          text: `Truck Loading Slip for ${record.truck_number} dated ${record.loading_date}`
-        });
+      // Open print window / Save PDF dialog
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.open();
+        printWindow.document.write(printHtml);
+        printWindow.document.close();
       } else {
-        const url = URL.createObjectURL(pdfBlob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        // Fallback for strict mobile webview
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        document.body.appendChild(iframe);
+        iframe.contentDocument.write(printHtml);
+        iframe.contentDocument.close();
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
       }
-    } catch (err) {
-      console.error(err);
-      alert("PDF download nahi ho paayi: " + err.message);
+    } catch (e) {
+      alert("Slip load nahi ho payi: " + e.message);
     }
   };
 
@@ -382,7 +477,7 @@ export default function App() {
       <header className="w-full bg-white border-b-2 border-slate-200 shadow-sm sticky top-0 z-50">
         <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <button 
-            onClick={() => { setRole(null); setCurrentStep(1); }} 
+            onClick={() => { setRole(null); resetForm(); }} 
             className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border-2 border-rose-300 rounded-xl text-xs font-black flex items-center gap-1 transition"
           >
             <LogOut className="w-3.5 h-3.5" /> Exit
@@ -390,14 +485,14 @@ export default function App() {
 
           <div className="flex gap-2 flex-1 justify-end">
             <button
-              onClick={() => { setActiveTab('new'); setCurrentStep(1); }}
+              onClick={() => { resetForm(); setActiveTab('new'); }}
               className={`px-4 py-2 rounded-xl text-xs font-black transition ${
                 activeTab === 'new' 
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30' 
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              New Truck
+              {editingRecordId ? 'Editing Truck' : 'New Truck'}
             </button>
             <button
               onClick={() => setActiveTab('history')}
@@ -416,6 +511,20 @@ export default function App() {
       <main className="w-full max-w-md p-4 pb-24 flex flex-col justify-center">
         {activeTab === 'new' && (
           <div className="space-y-6">
+            {editingRecordId && (
+              <div className="bg-amber-100 border-2 border-amber-400 p-3 rounded-2xl flex items-center justify-between">
+                <span className="text-xs font-black text-amber-900 flex items-center gap-1.5">
+                  <Edit3 className="w-4 h-4 text-amber-700" /> Purani Entry Edit Kar Rahe Hain
+                </span>
+                <button 
+                  onClick={resetForm} 
+                  className="text-xs font-bold text-rose-700 bg-white px-2.5 py-1 rounded-xl border border-rose-300"
+                >
+                  Cancel Edit
+                </button>
+              </div>
+            )}
+
             {currentStep === 1 && (
               <div className="space-y-4">
                 {/* 1. Factory */}
@@ -648,7 +757,7 @@ export default function App() {
 
                           {/* DIRECT CAMERA CLICK BUTTON */}
                           <label className={`p-2.5 rounded-xl border-2 flex items-center justify-center gap-1 cursor-pointer font-black text-xs transition ${
-                            d.photo || d.preview 
+                            d.photo || d.preview || d.photoUrl
                               ? 'bg-emerald-600 text-white border-emerald-700' 
                               : 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
                           }`}>
@@ -685,9 +794,9 @@ export default function App() {
                           )}
                         </div>
 
-                        {d.preview && (
+                        {(d.preview || d.photoUrl) && (
                           <div className="relative rounded-xl overflow-hidden h-24 border-2 border-emerald-200">
-                            <img src={d.preview} alt="Dhaang Preview" className="w-full h-full object-cover" />
+                            <img src={d.preview || d.photoUrl} alt="Dhaang Preview" className="w-full h-full object-cover" />
                           </div>
                         )}
                       </div>
@@ -696,7 +805,7 @@ export default function App() {
 
                   <button
                     type="button"
-                    onClick={() => setDhaange([...dhaange, { bags: '', photo: null, preview: '' }])}
+                    onClick={() => setDhaange([...dhaange, { bags: '', photo: null, preview: '', photoUrl: '' }])}
                     className="w-full py-3 bg-emerald-50 text-emerald-700 border-2 border-dashed border-emerald-300 rounded-2xl font-black text-xs flex items-center justify-center gap-1.5 transition"
                   >
                     <Plus className="w-4 h-4" /> Add Dhaang ({dhaange.length + 1})
@@ -721,7 +830,7 @@ export default function App() {
 
                     {/* Direct Camera for Kanta */}
                     <label className={`p-3.5 rounded-2xl border-2 flex items-center justify-center gap-1 cursor-pointer font-black text-xs transition ${
-                      kantaPhoto 
+                      kantaPhoto || kantaUrlSaved || kantaPreview
                         ? 'bg-indigo-600 text-white border-indigo-700' 
                         : 'bg-indigo-50 text-indigo-700 border-indigo-300'
                     }`}>
@@ -757,9 +866,9 @@ export default function App() {
                     </label>
                   </div>
 
-                  {kantaPreview && (
+                  {(kantaPreview || kantaUrlSaved) && (
                     <div className="rounded-2xl overflow-hidden h-28 border-2 border-indigo-200 mt-2">
-                      <img src={kantaPreview} alt="Slip Preview" className="w-full h-full object-cover" />
+                      <img src={kantaPreview || kantaUrlSaved} alt="Slip Preview" className="w-full h-full object-cover" />
                     </div>
                   )}
                 </div>
@@ -778,7 +887,7 @@ export default function App() {
                     onClick={handleSubmitAll}
                     className="flex-[2] py-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 text-white font-black text-base uppercase tracking-wider shadow-xl flex items-center justify-center gap-2 active:scale-98 transition disabled:opacity-50"
                   >
-                    {loading ? 'Saving & Dispatching...' : 'Save & Despatch'}
+                    {loading ? 'Saving Changes...' : editingRecordId ? 'Update Changes' : 'Save & Despatch'}
                   </button>
                 </div>
               </div>
@@ -786,7 +895,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: SEARCH, DATE FILTER & PDF */}
+        {/* TAB 2: SEARCH, DATE FILTER, VIEW/EDIT & PDF */}
         {activeTab === 'history' && (
           <div className="space-y-4">
             {/* Search Box */}
@@ -864,8 +973,8 @@ export default function App() {
                           </span>
                         </div>
                       </div>
-                      <span className="text-xs font-black uppercase px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-800">
-                        Completed
+                      <span className="text-xs font-black uppercase px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Completed
                       </span>
                     </div>
 
@@ -874,12 +983,21 @@ export default function App() {
                       <span>Net Wt: <strong>{r.net_weight ? `${r.net_weight} kg` : 'N/A'}</strong></span>
                     </div>
 
-                    <div className="pt-1 flex justify-end">
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      {/* VIEW & EDIT BUTTON */}
+                      <button
+                        onClick={() => handleEditRecord(r)}
+                        className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 border border-slate-300 transition"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-blue-600" /> View / Edit Entry
+                      </button>
+
+                      {/* NATIVE PRINT / SAVE PDF BUTTON */}
                       <button
                         onClick={() => generatePDF(r)}
-                        className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 shadow-md shadow-purple-500/20 active:scale-98 transition"
+                        className="py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-purple-500/20 active:scale-98 transition"
                       >
-                        <FileText className="w-4 h-4" /> Download / Share PDF Slip
+                        <FileText className="w-3.5 h-3.5" /> Print / Save PDF
                       </button>
                     </div>
                   </div>
